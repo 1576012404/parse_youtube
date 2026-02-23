@@ -128,8 +128,8 @@ def get_video_transcript(
         ytt_api = YouTubeTranscriptApi()
         transcript_list = ytt_api.list(video_id)
         transcript = transcript_list.find_transcript(languages)
-        transcript_data = transcript.fetch()
-        return " ".join([entry["text"] for entry in transcript_data])
+        fetched = transcript.fetch()
+        return " ".join([snippet.text for snippet in fetched.snippets])
     except TranscriptsDisabled:
         logger.warning(f"Transcripts disabled for video {video_id}")
         return None
