@@ -1,0 +1,22 @@
+2026-02-23 14:18:36,924 - INFO - Starting YouTube channel monitor - 2026-02-23 14:18:36.924425
+2026-02-23 14:18:36,924 - ERROR - Configuration error: invalid literal for int() with base 10: ''
+2026-02-23 14:24:26,651 - INFO - Starting YouTube channel monitor - 2026-02-23 14:24:26.651843
+2026-02-23 14:24:26,652 - INFO - Monitoring 1 channels
+2026-02-23 14:24:26,652 - INFO - Notification type: feishu
+2026-02-23 14:24:26,652 - INFO - Checking channel: NaNa说美股
+2026-02-23 14:24:26,909 - INFO -   Processing: 上下翻飞！NaNa说美股(2026.02.20)
+2026-02-23 14:24:28,002 - ERROR - Error fetching transcript for video I2EYMCwRKfU: 
+Could not retrieve a transcript for the video https://www.youtube.com/watch?v=I2EYMCwRKfU! This is most likely caused by:
+
+YouTube is blocking requests from your IP. This usually is due to one of the following reasons:
+- You have done too many requests and your IP has been blocked by YouTube
+- You are doing requests from an IP belonging to a cloud provider (like AWS, Google Cloud Platform, Azure, etc.). Unfortunately, most IPs from cloud providers are blocked by YouTube.
+
+There are two things you can do to work around this:
+1. Use proxies to hide your IP address, as explained in the "Working around IP bans" section of the README (https://github.com/jdepoix/youtube-transcript-api?tab=readme-ov-file#working-around-ip-bans-requestblocked-or-ipblocked-exception).
+2. (NOT RECOMMENDED) If you authenticate your requests using cookies, you will be able to continue doing requests for a while. However, YouTube will eventually permanently ban the account that you have used to authenticate with! So only do this if you don't mind your account being banned!
+
+If you are sure that the described cause is not responsible for this error and that a transcript should be retrievable, please create an issue at https://github.com/jdepoix/youtube-transcript-api/issues. Please add which version of youtube_transcript_api you are using and provide the information needed to replicate the error. Also make sure that there are no open issues which already describe your problem!
+2026-02-23 14:24:33,003 - WARNING -   No transcript, skipping
+2026-02-23 14:24:33,004 - INFO - No new videos found today
+2026-02-23 14:24:33,004 - INFO - Completed - 2026-02-23 14:24:33.004708
