@@ -1,13 +1,14 @@
 # YouTube 博主每日更新追踪
 
-自动追踪指定 YouTube 博主的每日更新，使用 AI 生成摘要并通过邮件发送。
+自动追踪指定 YouTube 博主的每日更新，使用 AI 生成摘要并通过邮件或飞书发送通知。
 
 ## 功能
 
 - 自动获取指定频道的最新视频
 - 提取视频字幕内容
 - 使用 AI (DeepSeek/OpenAI 兼容) 生成内容摘要
-- 通过邮件发送每日汇总
+- 支持邮件通知
+- 支持飞书机器人通知
 - 支持 GitHub Actions 定时执行
 
 ## 本地运行
@@ -32,21 +33,38 @@ python main.py
 
 ### 2. 配置 Secrets
 
-在仓库的 **Settings → Secrets and variables → Actions** 中添加以下 secrets：
+在仓库的 **Settings → Secrets and variables → Actions** 中添加：
 
-| Secret 名称 | 必需 | 说明 |
-|------------|------|------|
-| `YOUTUBE_API_KEY` | ✅ | YouTube Data API v3 Key |
-| `LLM_API_KEY` | ✅ | DeepSeek 或 OpenAI API Key |
-| `LLM_BASE_URL` | ❌ | API 地址，默认 DeepSeek |
-| `LLM_MODEL` | ❌ | 模型名称，默认 deepseek-chat |
-| `SMTP_SERVER` | ❌ | SMTP 服务器地址 |
-| `SMTP_PORT` | ❌ | SMTP 端口，默认 587 |
-| `SENDER_EMAIL` | ❌ | 发件人邮箱 |
-| `SENDER_PASSWORD` | ❌ | SMTP 授权码/密码 |
-| `RECEIVER_EMAIL` | ❌ | 收件人邮箱 |
+#### 必需配置
 
-> 邮件配置为可选，不配置则只生成摘要不发送邮件。
+| Secret 名称 | 说明 |
+|------------|------|
+| `YOUTUBE_API_KEY` | YouTube Data API v3 Key |
+| `LLM_API_KEY` | DeepSeek 或 OpenAI API Key |
+| `NOTIFICATION_TYPE` | 通知类型: `email` / `feishu` / `both` |
+
+#### LLM 配置（可选）
+
+| Secret 名称 | 默认值 | 说明 |
+|------------|--------|------|
+| `LLM_BASE_URL` | `https://api.deepseek.com/v1` | API 地址 |
+| `LLM_MODEL` | `deepseek-chat` | 模型名称 |
+
+#### 邮件通知（NOTIFICATION_TYPE 为 email 或 both 时必需）
+
+| Secret 名称 | 说明 |
+|------------|------|
+| `SMTP_SERVER` | SMTP 服务器地址 |
+| `SMTP_PORT` | SMTP 端口 |
+| `SENDER_EMAIL` | 发件人邮箱 |
+| `SENDER_PASSWORD` | SMTP 授权码 |
+| `RECEIVER_EMAIL` | 收件人邮箱 |
+
+#### 飞书通知（NOTIFICATION_TYPE 为 feishu 或 both 时必需）
+
+| Secret 名称 | 说明 |
+|------------|------|
+| `FEISHU_WEBHOOK` | 飞书机器人 Webhook 地址 |
 
 ### 3. 启用 Actions
 
@@ -72,6 +90,12 @@ python main.py
 1. 登录 QQ 邮箱 → 设置 → 账户
 2. 开启 POP3/SMTP 服务
 3. 生成授权码
+
+### 飞书机器人 Webhook
+
+1. 打开飞书群聊 → 设置 → 群机器人 → 添加机器人
+2. 选择「自定义机器人」
+3. 复制 Webhook 地址
 
 ### 查找频道 ID
 

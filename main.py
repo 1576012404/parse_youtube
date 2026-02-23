@@ -22,18 +22,50 @@ CHANNELS_FILE = os.getenv("CHANNELS_FILE", "channels.json")
 PROCESSED_FILE = os.getenv("PROCESSED_FILE", "processed_videos.json")
 
 
-def get_env(key: str, default: Optional[str] = None) -> Optional[str]:
-    value = os.getenv(key, default)
-    if not value:
-        logger.warning(f"Environment variable {key} is not set")
-    return value
-
-
-def get_env_required(key: str) -> str:
-    value = os.getenv(key)
-    if not value:
-        raise ValueError(f"Required environment variable {key} is not set")
-    return value
+class Config:
+    def __init__(self):
+        self.youtube_api_key = self._get_required("YOUTUBE_API_KEY")
+        self.llm_api_key = self._get_required("LLM_API_KEY")
+        self.llm_base_url = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+        self.llm_model = os.getenv("LLM_MODEL", "deepseek-chat")
+        
+        self.notification_type = os.getenv("NOTIFICATION_TYPE", "email").lower()
+        
+        self.smtp_server = os.getenv("SMTP_SERVER", "")
+        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        self.sender_email = os.getenv("SENDER_EMAIL", "")
+        self.sender_password = os.getenv("SENDER_PASSWORD", "")
+        self.receiver_email = os.getenv("RECEIVER_EMAIL", "")
+        
+        self.feishu_webhook = os.getenv("FEISHU_WEBHOOK", "")
+        
+        self._validate()
+    
+    def _get_required(self, key: str) -> str:
+        value = os.getenv(key)
+        if not value:
+            raise ValueError(f"Required environment variable {key} is not set")
+        return value
+    
+    def _validate(self) -> None:
+        if self.notification_type not in ("email", "feishu", "both"):
+            raise ValueError(f"NOTIFICATION_TYPE must be 'email', 'feishu', or 'both', got '{self.notification_type}'")
+        
+        if self.notification_type in ("email", "both"):
+            if not all([self.smtp_server, self.sender_email, self.sender_password, self.receiver_email]):
+                raise ValueError("Email notification requires SMTP_SERVER, SENDER_EMAIL, SENDER_PASSWORD, and RECEIVER_EMAIL")
+        
+        if self.notification_type in ("feishu", "both"):
+            if not self.feishu_webhook:
+                raise ValueError("Feishu notification requires FEISHU_WEBHOOK")
+    
+    @property
+    def email_enabled(self) -> bool:
+        return self.notification_type in ("email", "both")
+    
+    @property
+    def feishu_enabled(self) -> bool:
+        return self.notification_type in ("feishu", "both")
 
 
 def load_channels() -> list[dict]:
@@ -123,25 +155,81 @@ def summarize_content(
 
 
 def send_email(
-    smtp_server: str,
-    smtp_port: int,
-    sender_email: str,
-    sender_password: str,
-    receiver_email: str,
+    config: Config,
     subject: str,
     body: str
 ) -> None:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = sender_email
-    msg["To"] = receiver_email
-
+    msg["From"] = config.sender_email
+    msg["To"] = config.receiver_email
     msg.attach(MIMEText(body, "html", "utf-8"))
 
-    with smtplib.SMTP(smtp_server, smtp_port) as server:
+    with smtplib.SMTP(config.smtp_server, config.smtp_port) as server:
         server.starttls()
-        server.login(sender_email, sender_password)
-        server.sendmail(sender_email, receiver_email, msg.as_string())
+        server.login(config.sender_email, config.sender_password)
+        server.sendmail(config.sender_email, config.receiver_email, msg.as_string())
+
+
+def send_feishu(config: Config, summaries: list[dict], date_str: str) -> None:
+    content_lines = [f"## YouTube 每日更新汇总 - {date_str}\n"]
+    
+    for item in summaries:
+        content_lines.append(f"### [{item['title']}]({item['url']})")
+        content_lines.append(f"**频道:** {item['channel']}")
+        content_lines.append(f"**摘要:**\n{item['summary']}")
+        content_lines.append("---\n")
+    
+    content = "\n".join(content_lines)
+    
+    payload = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {
+                    "tag": "plain_text",
+                    "content": f"YouTube 每日更新汇总 - {date_str}"
+                },
+                "template": "blue"
+            },
+            "elements": []
+        }
+    }
+    
+    for item in summaries:
+        payload["card"]["elements"].extend([
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**[{item['title']}]({item['url']})**\n频道: {item['channel']}"
+                }
+            },
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": item['summary'].replace("\n", "\n")
+                }
+            },
+            {
+                "tag": "hr"
+            }
+        ])
+    
+    if payload["card"]["elements"]:
+        payload["card"]["elements"].pop()
+    
+    response = requests.post(
+        config.feishu_webhook,
+        json=payload,
+        headers={"Content-Type": "application/json"},
+        timeout=30
+    )
+    response.raise_for_status()
+    result = response.json()
+    if result.get("code", 0) != 0:
+        raise Exception(f"Feishu API error: {result}")
 
 
 def format_email_body(summaries: list[dict], date_str: str) -> str:
@@ -155,8 +243,8 @@ def format_email_body(summaries: list[dict], date_str: str) -> str:
     for item in summaries:
         body_parts.append(f"""
 <div style="margin-bottom: 30px;">
-    <h2 style="color: #cc0000;">{item['title']}</h2>
-    <p><b>频道:</b> {item['channel']} | <a href="{item['url']}">观看视频</a></p>
+    <h2 style="color: #cc0000;"><a href="{item['url']}">{item['title']}</a></h2>
+    <p><b>频道:</b> {item['channel']}</p>
     <h3>内容摘要:</h3>
     <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
         {item['summary'].replace(chr(10), '<br>')}
@@ -169,23 +257,31 @@ def format_email_body(summaries: list[dict], date_str: str) -> str:
     return "".join(body_parts)
 
 
+def send_notifications(config: Config, summaries: list[dict]) -> None:
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    
+    if config.email_enabled:
+        try:
+            subject = f"YouTube 每日更新汇总 - {date_str}"
+            body = format_email_body(summaries, date_str)
+            send_email(config, subject, body)
+            logger.info(f"Email sent successfully with {len(summaries)} new videos")
+        except Exception as e:
+            logger.error(f"Failed to send email: {e}")
+    
+    if config.feishu_enabled:
+        try:
+            send_feishu(config, summaries, date_str)
+            logger.info(f"Feishu notification sent successfully with {len(summaries)} new videos")
+        except Exception as e:
+            logger.error(f"Failed to send Feishu notification: {e}")
+
+
 def main() -> None:
     logger.info(f"Starting YouTube channel monitor - {datetime.now()}")
     
     try:
-        youtube_api_key = get_env_required("YOUTUBE_API_KEY")
-        llm_api_key = get_env_required("LLM_API_KEY")
-        llm_base_url = get_env("LLM_BASE_URL", "https://api.deepseek.com/v1")
-        llm_model = get_env("LLM_MODEL", "deepseek-chat")
-        
-        smtp_server = get_env("SMTP_SERVER") or ""
-        smtp_port = int(get_env("SMTP_PORT") or "587")
-        sender_email = get_env("SENDER_EMAIL") or ""
-        sender_password = get_env("SENDER_PASSWORD") or ""
-        receiver_email = get_env("RECEIVER_EMAIL") or ""
-        
-        email_enabled = bool(smtp_server and sender_email and sender_password and receiver_email)
-        
+        config = Config()
     except ValueError as e:
         logger.error(f"Configuration error: {e}")
         return
@@ -194,6 +290,7 @@ def main() -> None:
     processed = load_processed_videos()
     
     logger.info(f"Monitoring {len(channels)} channels, {len(processed)} videos already processed")
+    logger.info(f"Notification type: {config.notification_type}")
     
     new_summaries = []
     
@@ -208,7 +305,7 @@ def main() -> None:
         logger.info(f"Checking channel: {channel_name}")
         
         try:
-            videos = get_latest_videos(youtube_api_key, channel_id, max_results=3)
+            videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=3)
         except Exception as e:
             logger.error(f"Failed to fetch videos from {channel_name}: {e}")
             continue
@@ -236,7 +333,11 @@ def main() -> None:
             
             try:
                 summary = summarize_content(
-                    llm_api_key, llm_base_url or "", transcript, title, llm_model or "deepseek-chat"
+                    config.llm_api_key,
+                    config.llm_base_url,
+                    transcript,
+                    title,
+                    config.llm_model
                 )
             except Exception as e:
                 logger.error(f"  Failed to summarize: {e}")
@@ -257,23 +358,7 @@ def main() -> None:
     save_processed_videos(processed)
     
     if new_summaries:
-        today = datetime.now().strftime("%Y-%m-%d")
-        subject = f"YouTube 每日更新汇总 - {today}"
-        body = format_email_body(new_summaries, today)
-        
-        if email_enabled:
-            try:
-                send_email(
-                    smtp_server, smtp_port,
-                    sender_email, sender_password, receiver_email,
-                    subject, body
-                )
-                logger.info(f"Email sent successfully with {len(new_summaries)} new videos")
-            except Exception as e:
-                logger.error(f"Failed to send email: {e}")
-        else:
-            logger.info("Email not configured, skipping notification")
-            logger.info(f"Summaries generated: {len(new_summaries)}")
+        send_notifications(config, new_summaries)
     else:
         logger.info("No new videos found today")
     
