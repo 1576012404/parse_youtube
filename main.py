@@ -24,7 +24,7 @@ log_filename = LOG_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s",
     handlers=[
         logging.StreamHandler(),
         logging.FileHandler(log_filename, encoding="utf-8")
@@ -37,12 +37,10 @@ PROCESSED_FILE = os.getenv("PROCESSED_FILE", "processed_videos.json")
 
 
 def is_published_today(published_at: str) -> bool:
-    print("published_at",published_at)
     if not published_at:
         return False
     try:
         pub_date = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
-        print("pub_date",pub_date)
         today = datetime.now(timezone.utc).date()
         return pub_date.date() == today
     except Exception:
@@ -324,15 +322,14 @@ def main() -> None:
             title = snippet.get("title", "Untitled")
             published = snippet.get("publishedAt", "")
             
-            # if not is_published_today(published):
-            #     logger.info(f"  Skipping not today: {title}")
-            #     continue
+            if not is_published_today(published):
+                continue
 
             
             logger.info(f"  Processing: {title}")
             
             transcript = get_video_transcript(video_id)
-            time.sleep(5)
+            time.sleep(10)
             if not transcript:
                 logger.warning(f"  No transcript, skipping")
                 continue
