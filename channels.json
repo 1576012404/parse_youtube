@@ -2,27 +2,31 @@
   "channels": [
     {
       "name": "NaNa说美股",
-      "channel_id": "UCKq_HoSdxgs0iYJ5C3vsJ_g"
+      "channel_id": "UCFhJ8ZFg9W4kLwFTBBNIjOw"
     },
     {
       "name": "贝拉聊财金",
-      "channel_id": "UCCwW1Y2qChYbBKOLpGsa0Dw"
+      "channel_id": "UCVomjkM_t0EcctTWSE1Jvxg"
     },
     {
       "name": "Terry Chen 泰瑞",
-      "channel_id": "UCrYwEo3X-wm3HfP5XwK7e2A"
+      "channel_id": "UC_whOg3XES3Fihic53fvo4Q"
     },
     {
       "name": "股市咖啡屋 Stock Cafe",
-      "channel_id": "UCF7ZmZ4YvRf1Z0jUHmEH5gA"
-    },
-    {
-      "name": "王志安",
-      "channel_id": "UC6Os0_xE4a4gZ9lE4xHxTzA"
+      "channel_id": "UCGDMLMZtjCd5P4fhTCetwsw"
     },
     {
       "name": "Mike是麥克",
-      "channel_id": "UCqZQJ4Q-1xV3Z1Q6V9Hc9Wg"
+      "channel_id": "UCAxQ8sjHgjXh26la7jEBw3w"
+    },
+      {
+      "name": "美投讲美股",
+      "channel_id": "UCBUH38E0ngqvmTqdchWunwQ"
+    },
+    {
+      "name": "王志安",
+      "channel_id": "UCBKDRq35-L8xev4O7ZqBeLg"
     }
   ]
 }

@@ -310,6 +310,7 @@ def main() -> None:
         
         try:
             videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=3)
+            logger.info(f" channel video length: {len(videos)}")
         except Exception as e:
             logger.error(f"Failed to fetch videos from {channel_name}: {e}")
             continue
@@ -368,6 +369,7 @@ def main() -> None:
     
     logger.info(f"Completed - {datetime.now()}")
 
-
+#查询channel_id方式
+#videos.xml?channel_id=UCBUH38E0ngqvmTqdchWunwQ
 if __name__ == "__main__":
     main()
