@@ -16,9 +16,18 @@ from openai import OpenAI
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
 
+LOG_DIR = Path(__file__).parent / "logs"
+LOG_DIR.mkdir(exist_ok=True)
+
+log_filename = LOG_DIR / f"{datetime.now().strftime('%Y-%m-%d')}.log"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(log_filename, encoding="utf-8")
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -102,7 +111,7 @@ def save_processed_videos(video_ids: set[str]) -> None:
         json.dump(list(video_ids), f, ensure_ascii=False, indent=2)
 
 
-def get_latest_videos(api_key: str, channel_id: str, max_results: int = 5) -> list[dict]:
+def get_latest_videos(api_key: str, channel_id: str, max_results: int = 1) -> list[dict]:
     url = "https://www.googleapis.com/youtube/v3/search"
     params = {
         "key": api_key,
@@ -303,7 +312,8 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Failed to fetch videos from {channel_name}: {e}")
             continue
-        
+
+        print("videos",videos)
         for video in videos:
             video_id = video.get("id", {}).get("videoId")
             if not video_id:
@@ -361,14 +371,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    conf = Config()
-    new_summaries=[]
-    new_summaries.append({
-        "channel": "channel",
-        "title": "title",
-        "url": "video_url",
-        "published": "published",
-        "summary": "summary",
-    })
-    send_notifications(conf,new_summaries)
-    # main()
+
+    main()
