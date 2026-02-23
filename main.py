@@ -27,10 +27,12 @@ PROCESSED_FILE = os.getenv("PROCESSED_FILE", "processed_videos.json")
 
 
 def is_published_today(published_at: str) -> bool:
+    print("published_at",published_at)
     if not published_at:
         return False
     try:
         pub_date = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        print("pub_date",pub_date)
         today = datetime.now(timezone.utc).date()
         return pub_date.date() == today
     except Exception:
@@ -123,15 +125,13 @@ def get_video_transcript(
         languages = ["zh-Hans", "zh-Hant", "zh-CN", "zh-TW", "en"]
     
     try:
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        try:
-            transcript = transcript_list.find_transcript(languages)
-        except NoTranscriptFound:
-            transcript = transcript_list.find_generated_transcript(languages)
-        transcript_data = transcript.fetch()
+        transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
         return " ".join([entry["text"] for entry in transcript_data])
-    except (TranscriptsDisabled, NoTranscriptFound) as e:
-        logger.warning(f"No transcript available for video {video_id}: {e}")
+    except TranscriptsDisabled:
+        logger.warning(f"Transcripts disabled for video {video_id}")
+        return None
+    except NoTranscriptFound:
+        logger.warning(f"No transcript found for video {video_id}")
         return None
     except Exception as e:
         logger.error(f"Error fetching transcript for video {video_id}: {e}")
@@ -302,9 +302,9 @@ def main() -> None:
         return
     
     channels = load_channels()
-    processed = load_processed_videos()
+
     
-    logger.info(f"Monitoring {len(channels)} channels, {len(processed)} videos already processed")
+    logger.info(f"Monitoring {len(channels)} channels")
     logger.info(f"Notification type: {config.notification_type}")
     
     new_summaries = []
@@ -320,7 +320,7 @@ def main() -> None:
         logger.info(f"Checking channel: {channel_name}")
         
         try:
-            videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=10)
+            videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=1)
         except Exception as e:
             logger.error(f"Failed to fetch videos from {channel_name}: {e}")
             continue
@@ -334,20 +334,16 @@ def main() -> None:
             title = snippet.get("title", "Untitled")
             published = snippet.get("publishedAt", "")
             
-            if not is_published_today(published):
-                logger.info(f"  Skipping not today: {title}")
-                continue
-            
-            if video_id in processed:
-                logger.info(f"  Skipping processed: {title}")
-                continue
+            # if not is_published_today(published):
+            #     logger.info(f"  Skipping not today: {title}")
+            #     continue
+
             
             logger.info(f"  Processing: {title}")
             
             transcript = get_video_transcript(video_id)
             if not transcript:
                 logger.warning(f"  No transcript, skipping")
-                processed.add(video_id)
                 continue
             
             try:
@@ -371,10 +367,9 @@ def main() -> None:
                 "summary": summary,
             })
             
-            processed.add(video_id)
+
             logger.info(f"  Summary generated successfully")
-    
-    save_processed_videos(processed)
+
     
     if new_summaries:
         send_notifications(config, new_summaries)
