@@ -8,6 +8,3 @@ venv/
 *.egg-info/
 dist/
 build/
-processed_videos.json
-test.py
-transcript.txt

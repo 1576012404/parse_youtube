@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import smtplib
+import time
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -331,6 +332,7 @@ def main() -> None:
             logger.info(f"  Processing: {title}")
             
             transcript = get_video_transcript(video_id)
+            time.sleep(5)
             if not transcript:
                 logger.warning(f"  No transcript, skipping")
                 continue
@@ -373,3 +375,8 @@ def main() -> None:
 if __name__ == "__main__":
 
     main()
+    # config=Config()
+    # channel_id="UCFhJ8ZFg9W4kLwFTBBNIjOw"
+    # videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=1)
+    # print("videos_len",len(videos))
+    # print("videos",videos)
