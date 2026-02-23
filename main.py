@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import smtplib
-from datetime import datetime
+from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
@@ -24,6 +24,17 @@ logger = logging.getLogger(__name__)
 
 CHANNELS_FILE = os.getenv("CHANNELS_FILE", "channels.json")
 PROCESSED_FILE = os.getenv("PROCESSED_FILE", "processed_videos.json")
+
+
+def is_published_today(published_at: str) -> bool:
+    if not published_at:
+        return False
+    try:
+        pub_date = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        today = datetime.now(timezone.utc).date()
+        return pub_date.date() == today
+    except Exception:
+        return False
 
 
 class Config:
@@ -309,8 +320,7 @@ def main() -> None:
         logger.info(f"Checking channel: {channel_name}")
         
         try:
-            videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=3)
-            logger.info(f" channel video length: {len(videos)}")
+            videos = get_latest_videos(config.youtube_api_key, channel_id, max_results=10)
         except Exception as e:
             logger.error(f"Failed to fetch videos from {channel_name}: {e}")
             continue
@@ -323,6 +333,10 @@ def main() -> None:
             snippet = video.get("snippet", {})
             title = snippet.get("title", "Untitled")
             published = snippet.get("publishedAt", "")
+            
+            if not is_published_today(published):
+                logger.info(f"  Skipping not today: {title}")
+                continue
             
             if video_id in processed:
                 logger.info(f"  Skipping processed: {title}")
@@ -369,7 +383,6 @@ def main() -> None:
     
     logger.info(f"Completed - {datetime.now()}")
 
-#查询channel_id方式
-#videos.xml?channel_id=UCBUH38E0ngqvmTqdchWunwQ
+
 if __name__ == "__main__":
     main()
