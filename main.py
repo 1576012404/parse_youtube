@@ -190,14 +190,22 @@ def send_email(
 
 
 def send_feishu(config: Config, summaries: list[dict], date_str: str) -> None:
-    lines = [f"YouTube 每日更新汇总 - {date_str}", "=" * 40]
+    lines = [
+        f"🎬 YouTube 每日更新汇总 - {date_str}",
+        "━" * 35
+    ]
     
     for item in summaries:
-        lines.append(f"\n【{item['title']}】")
-        lines.append(f"频道: {item['channel']}")
-        lines.append(f"链接: {item['url']}")
-        lines.append(f"摘要:\n{item['summary']}")
-        lines.append("-" * 40)
+        lines.extend([
+            "",
+            f"📹 {item['title']}",
+            f"📺 频道: {item['channel']}",
+            f"🔗 {item['url']}",
+            "",
+            "📝 摘要:",
+            item['summary'],
+            "━" * 35
+        ])
     
     payload = {
         "msg_type": "text",
@@ -362,5 +370,5 @@ if __name__ == "__main__":
         "published": "published",
         "summary": "summary",
     })
-    # send_notifications(conf,new_summaries)
+    send_notifications(conf,new_summaries)
     # main()
