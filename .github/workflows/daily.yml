@@ -5,6 +5,9 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   daily-update:
     runs-on: ubuntu-latest
@@ -12,28 +15,36 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
       
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Create config from secrets
-        run: |
-          echo '${{ secrets.CONFIG_JSON }}' > config.json
-      
-      - name: Run main script
+      - name: Run YouTube monitor
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
         run: python main.py
       
       - name: Commit processed videos
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add processed_videos.json || true
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update processed videos"
-          git push || true
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add processed_videos.json 2>/dev/null || true
+          git diff --quiet && git diff --staged --quiet || (git commit -m "chore: update processed videos [skip ci]" && git push)

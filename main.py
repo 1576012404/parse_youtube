@@ -1,44 +1,59 @@
 import json
+import logging
 import os
 import smtplib
 from datetime import datetime
-from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional
 
 import requests
 from openai import OpenAI
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
+from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
 
-CONFIG_FILE = "config.json"
-CHANNELS_FILE = "channels.json"
-PROCESSED_FILE = "processed_videos.json"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+CHANNELS_FILE = os.getenv("CHANNELS_FILE", "channels.json")
+PROCESSED_FILE = os.getenv("PROCESSED_FILE", "processed_videos.json")
 
 
-def load_config():
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
+def get_env(key: str, default: Optional[str] = None) -> Optional[str]:
+    value = os.getenv(key, default)
+    if not value:
+        logger.warning(f"Environment variable {key} is not set")
+    return value
 
 
-def load_channels():
+def get_env_required(key: str) -> str:
+    value = os.getenv(key)
+    if not value:
+        raise ValueError(f"Required environment variable {key} is not set")
+    return value
+
+
+def load_channels() -> list[dict]:
     with open(CHANNELS_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)["channels"]
+        return json.load(f).get("channels", [])
 
 
-def load_processed_videos():
+def load_processed_videos() -> set[str]:
     if os.path.exists(PROCESSED_FILE):
         with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
             return set(json.load(f))
     return set()
 
 
-def save_processed_videos(video_ids: set):
+def save_processed_videos(video_ids: set[str]) -> None:
     with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
-        json.dump(list(video_ids), f)
+        json.dump(list(video_ids), f, ensure_ascii=False, indent=2)
 
 
-def get_latest_videos(api_key: str, channel_id: str, max_results: int = 5):
+def get_latest_videos(api_key: str, channel_id: str, max_results: int = 5) -> list[dict]:
     url = "https://www.googleapis.com/youtube/v3/search"
     params = {
         "key": api_key,
@@ -48,12 +63,18 @@ def get_latest_videos(api_key: str, channel_id: str, max_results: int = 5):
         "maxResults": max_results,
         "type": "video",
     }
-    response = requests.get(url, params=params)
+    response = requests.get(url, params=params, timeout=30)
     response.raise_for_status()
     return response.json().get("items", [])
 
 
-def get_video_transcript(video_id: str, languages: list = ["zh-Hans", "zh-Hant", "zh-CN", "zh-TW", "en"]) -> Optional[str]:
+def get_video_transcript(
+    video_id: str,
+    languages: Optional[list[str]] = None
+) -> Optional[str]:
+    if languages is None:
+        languages = ["zh-Hans", "zh-Hant", "zh-CN", "zh-TW", "en"]
+    
     try:
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
         try:
@@ -62,18 +83,23 @@ def get_video_transcript(video_id: str, languages: list = ["zh-Hans", "zh-Hant",
             transcript = transcript_list.find_generated_transcript(languages)
         transcript_data = transcript.fetch()
         return " ".join([entry["text"] for entry in transcript_data])
-    except (TranscriptsDisabled, NoTranscriptFound, Exception) as e:
-        print(f"无法获取视频 {video_id} 的字幕: {e}")
+    except (TranscriptsDisabled, NoTranscriptFound) as e:
+        logger.warning(f"No transcript available for video {video_id}: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error fetching transcript for video {video_id}: {e}")
         return None
 
 
-def transcribe_with_whisper(api_key: str, video_url: str) -> Optional[str]:
-    print(f"使用 Whisper 转写: {video_url} (需要先下载音频)")
-    return None
-
-
-def summarize_with_deepseek(api_key: str, base_url: str, text: str, video_title: str) -> str:
+def summarize_content(
+    api_key: str,
+    base_url: str,
+    text: str,
+    video_title: str,
+    model: str = "deepseek-chat"
+) -> str:
     client = OpenAI(api_key=api_key, base_url=base_url)
+    
     prompt = f"""请总结以下YouTube视频的内容，提取关键信息和要点。
 
 视频标题: {video_title}
@@ -89,78 +115,133 @@ def summarize_with_deepseek(api_key: str, base_url: str, text: str, video_title:
 保持简洁，总字数不超过300字。"""
 
     response = client.chat.completions.create(
-        model="deepseek-chat",
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=500,
     )
-    return response.choices[0].message.content
+    return response.choices[0].message.content or ""
 
 
-def send_email(config: dict, subject: str, body: str):
-    email_config = config["email"]
+def send_email(
+    smtp_server: str,
+    smtp_port: int,
+    sender_email: str,
+    sender_password: str,
+    receiver_email: str,
+    subject: str,
+    body: str
+) -> None:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = email_config["sender_email"]
-    msg["To"] = email_config["receiver_email"]
+    msg["From"] = sender_email
+    msg["To"] = receiver_email
 
-    html_content = body.replace("\n", "<br>")
-    msg.attach(MIMEText(html_content, "html", "utf-8"))
+    msg.attach(MIMEText(body, "html", "utf-8"))
 
-    with smtplib.SMTP(email_config["smtp_server"], email_config["smtp_port"]) as server:
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
         server.starttls()
-        server.login(email_config["sender_email"], email_config["sender_password"])
-        server.sendmail(
-            email_config["sender_email"],
-            email_config["receiver_email"],
-            msg.as_string(),
-        )
+        server.login(sender_email, sender_password)
+        server.sendmail(sender_email, receiver_email, msg.as_string())
 
 
-def main():
-    print(f"开始执行 - {datetime.now()}")
-    config = load_config()
+def format_email_body(summaries: list[dict], date_str: str) -> str:
+    body_parts = [
+        "<!DOCTYPE html>",
+        "<html><head><meta charset='utf-8'></head><body>",
+        f"<h1>YouTube 每日更新汇总</h1>",
+        f"<p>日期: {date_str}</p><hr>",
+    ]
+    
+    for item in summaries:
+        body_parts.append(f"""
+<div style="margin-bottom: 30px;">
+    <h2 style="color: #cc0000;">{item['title']}</h2>
+    <p><b>频道:</b> {item['channel']} | <a href="{item['url']}">观看视频</a></p>
+    <h3>内容摘要:</h3>
+    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
+        {item['summary'].replace(chr(10), '<br>')}
+    </div>
+</div>
+<hr>
+""")
+    
+    body_parts.append("</body></html>")
+    return "".join(body_parts)
+
+
+def main() -> None:
+    logger.info(f"Starting YouTube channel monitor - {datetime.now()}")
+    
+    try:
+        youtube_api_key = get_env_required("YOUTUBE_API_KEY")
+        llm_api_key = get_env_required("LLM_API_KEY")
+        llm_base_url = get_env("LLM_BASE_URL", "https://api.deepseek.com/v1")
+        llm_model = get_env("LLM_MODEL", "deepseek-chat")
+        
+        smtp_server = get_env("SMTP_SERVER") or ""
+        smtp_port = int(get_env("SMTP_PORT") or "587")
+        sender_email = get_env("SENDER_EMAIL") or ""
+        sender_password = get_env("SENDER_PASSWORD") or ""
+        receiver_email = get_env("RECEIVER_EMAIL") or ""
+        
+        email_enabled = bool(smtp_server and sender_email and sender_password and receiver_email)
+        
+    except ValueError as e:
+        logger.error(f"Configuration error: {e}")
+        return
+    
     channels = load_channels()
     processed = load_processed_videos()
-
-    api_key = config["youtube_api_key"]
-    deepseek_key = config["deepseek_api_key"]
-    deepseek_url = config.get("deepseek_base_url", "https://api.deepseek.com/v1")
-
+    
+    logger.info(f"Monitoring {len(channels)} channels, {len(processed)} videos already processed")
+    
     new_summaries = []
-
+    
     for channel in channels:
-        channel_name = channel["name"]
-        channel_id = channel["channel_id"]
-        print(f"\n检查频道: {channel_name}")
-
-        try:
-            videos = get_latest_videos(api_key, channel_id, max_results=3)
-        except Exception as e:
-            print(f"获取频道视频失败: {e}")
+        channel_name = channel.get("name", "Unknown")
+        channel_id = channel.get("channel_id")
+        
+        if not channel_id:
+            logger.warning(f"Skipping channel {channel_name}: no channel_id")
             continue
-
+            
+        logger.info(f"Checking channel: {channel_name}")
+        
+        try:
+            videos = get_latest_videos(youtube_api_key, channel_id, max_results=3)
+        except Exception as e:
+            logger.error(f"Failed to fetch videos from {channel_name}: {e}")
+            continue
+        
         for video in videos:
-            video_id = video["id"]["videoId"]
-            title = video["snippet"]["title"]
-            published = video["snippet"]["publishedAt"]
-
-            if video_id in processed:
-                print(f"  跳过已处理: {title}")
+            video_id = video.get("id", {}).get("videoId")
+            if not video_id:
                 continue
-
-            print(f"  处理新视频: {title}")
-
+                
+            snippet = video.get("snippet", {})
+            title = snippet.get("title", "Untitled")
+            published = snippet.get("publishedAt", "")
+            
+            if video_id in processed:
+                logger.info(f"  Skipping processed: {title}")
+                continue
+            
+            logger.info(f"  Processing: {title}")
+            
             transcript = get_video_transcript(video_id)
             if not transcript:
-                print(f"  无法获取字幕，跳过")
+                logger.warning(f"  No transcript, skipping")
+                processed.add(video_id)
                 continue
-
+            
             try:
-                summary = summarize_with_deepseek(deepseek_key, deepseek_url, transcript, title)
+                summary = summarize_content(
+                    llm_api_key, llm_base_url or "", transcript, title, llm_model or "deepseek-chat"
+                )
             except Exception as e:
-                print(f"  生成摘要失败: {e}")
+                logger.error(f"  Failed to summarize: {e}")
                 continue
-
+            
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             new_summaries.append({
                 "channel": channel_name,
@@ -169,37 +250,34 @@ def main():
                 "published": published,
                 "summary": summary,
             })
-
+            
             processed.add(video_id)
-
+            logger.info(f"  Summary generated successfully")
+    
     save_processed_videos(processed)
-
+    
     if new_summaries:
         today = datetime.now().strftime("%Y-%m-%d")
-        subject = f"YouTube博主每日更新汇总 - {today}"
+        subject = f"YouTube 每日更新汇总 - {today}"
+        body = format_email_body(new_summaries, today)
         
-        body_parts = [f"<h1>YouTube博主每日更新汇总</h1>", f"<p>日期: {today}</p><hr>"]
-        
-        for item in new_summaries:
-            body_parts.append(f"""
-<h2>{item['title']}</h2>
-<p><b>频道:</b> {item['channel']} | <a href="{item['url']}">观看视频</a></p>
-<h3>内容摘要:</h3>
-<p>{item['summary']}</p>
-<hr>
-""")
-        
-        body = "".join(body_parts)
-        
-        try:
-            send_email(config, subject, body)
-            print(f"\n邮件发送成功，共 {len(new_summaries)} 条新视频")
-        except Exception as e:
-            print(f"\n邮件发送失败: {e}")
+        if email_enabled:
+            try:
+                send_email(
+                    smtp_server, smtp_port,
+                    sender_email, sender_password, receiver_email,
+                    subject, body
+                )
+                logger.info(f"Email sent successfully with {len(new_summaries)} new videos")
+            except Exception as e:
+                logger.error(f"Failed to send email: {e}")
+        else:
+            logger.info("Email not configured, skipping notification")
+            logger.info(f"Summaries generated: {len(new_summaries)}")
     else:
-        print("\n今天没有新视频更新")
-
-    print(f"执行完成 - {datetime.now()}")
+        logger.info("No new videos found today")
+    
+    logger.info(f"Completed - {datetime.now()}")
 
 
 if __name__ == "__main__":
