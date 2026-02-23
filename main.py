@@ -125,7 +125,10 @@ def get_video_transcript(
         languages = ["zh-Hans", "zh-Hant", "zh-CN", "zh-TW", "en"]
     
     try:
-        transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+        ytt_api = YouTubeTranscriptApi()
+        transcript_list = ytt_api.list(video_id)
+        transcript = transcript_list.find_transcript(languages)
+        transcript_data = transcript.fetch()
         return " ".join([entry["text"] for entry in transcript_data])
     except TranscriptsDisabled:
         logger.warning(f"Transcripts disabled for video {video_id}")
