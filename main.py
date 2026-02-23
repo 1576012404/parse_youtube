@@ -190,53 +190,21 @@ def send_email(
 
 
 def send_feishu(config: Config, summaries: list[dict], date_str: str) -> None:
-    content_lines = [f"## YouTube 每日更新汇总 - {date_str}\n"]
+    lines = [f"YouTube 每日更新汇总 - {date_str}", "=" * 40]
     
     for item in summaries:
-        content_lines.append(f"### [{item['title']}]({item['url']})")
-        content_lines.append(f"**频道:** {item['channel']}")
-        content_lines.append(f"**摘要:**\n{item['summary']}")
-        content_lines.append("---\n")
-    
-    content = "\n".join(content_lines)
+        lines.append(f"\n【{item['title']}】")
+        lines.append(f"频道: {item['channel']}")
+        lines.append(f"链接: {item['url']}")
+        lines.append(f"摘要:\n{item['summary']}")
+        lines.append("-" * 40)
     
     payload = {
-        "msg_type": "interactive",
-        "card": {
-            "header": {
-                "title": {
-                    "tag": "plain_text",
-                    "content": f"YouTube 每日更新汇总 - {date_str}"
-                },
-                "template": "blue"
-            },
-            "elements": []
+        "msg_type": "text",
+        "content": {
+            "text": "\n".join(lines)
         }
     }
-    
-    for item in summaries:
-        payload["card"]["elements"].extend([
-            {
-                "tag": "div",
-                "text": {
-                    "tag": "lark_md",
-                    "content": f"**[{item['title']}]({item['url']})**\n频道: {item['channel']}"
-                }
-            },
-            {
-                "tag": "div",
-                "text": {
-                    "tag": "lark_md",
-                    "content": item['summary'].replace("\n", "\n")
-                }
-            },
-            {
-                "tag": "hr"
-            }
-        ])
-    
-    if payload["card"]["elements"]:
-        payload["card"]["elements"].pop()
     
     response = requests.post(
         config.feishu_webhook,
@@ -361,6 +329,8 @@ def main() -> None:
                 logger.error(f"  Failed to summarize: {e}")
                 continue
             
+            logger.info(f"  Summary: {summary[:100]}...")
+            
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             new_summaries.append({
                 "channel": channel_name,
@@ -383,4 +353,14 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    conf = Config()
+    new_summaries=[]
+    new_summaries.append({
+        "channel": "channel",
+        "title": "title",
+        "url": "video_url",
+        "published": "published",
+        "summary": "summary",
+    })
+    # send_notifications(conf,new_summaries)
+    # main()
