@@ -312,7 +312,6 @@ def main() -> None:
             logger.error(f"Failed to fetch videos from {channel_name}: {e}")
             continue
 
-        print("videos",videos)
         for video in videos:
             video_id = video.get("id", {}).get("videoId")
             if not video_id:
@@ -329,7 +328,7 @@ def main() -> None:
             logger.info(f"  Processing: {title}")
             
             transcript = get_video_transcript(video_id)
-            time.sleep(10)
+            time.sleep(2)
             if not transcript:
                 logger.warning(f"  No transcript, skipping")
                 continue
